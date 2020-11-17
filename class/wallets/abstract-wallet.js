@@ -23,7 +23,6 @@ export class AbstractWallet {
     this.secret = ''; // private key or recovery phrase
     this.balance = 0;
     this.unconfirmed_balance = 0;
-    this.transactions = [];
     this._address = false; // cache
     this.utxo = [];
     this._lastTxFetch = 0;
@@ -40,7 +39,7 @@ export class AbstractWallet {
   }
 
   getTransactions() {
-    return this.transactions;
+    throw new Error('not implemented');
   }
 
   getUserHasSavedExport() {
@@ -115,6 +114,10 @@ export class AbstractWallet {
     return false;
   }
 
+  allowPayJoin() {
+    return false;
+  }
+
   weOwnAddress(address) {
     throw Error('not implemented');
   }
@@ -185,6 +188,17 @@ export class AbstractWallet {
     return 0;
   }
 
+  getLatestTransactionTimeEpoch() {
+    if (this.getTransactions().length === 0) {
+      return 0;
+    }
+    let max = 0;
+    for (const tx of this.getTransactions()) {
+      max = Math.max(new Date(tx.received) * 1, max);
+    }
+    return max;
+  }
+
   /**
    * @deprecated
    */
@@ -212,6 +226,10 @@ export class AbstractWallet {
   }
 
   getAddressAsync() {
+    return new Promise(resolve => resolve(this.getAddress()));
+  }
+
+  async getChangeAddressAsync() {
     return new Promise(resolve => resolve(this.getAddress()));
   }
 
@@ -260,4 +278,6 @@ export class AbstractWallet {
 
     return b58.encode(data);
   }
+
+  prepareForSerialization() {}
 }

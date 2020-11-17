@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-community/async-storage';
 import { Platform } from 'react-native';
 import { AppStorage, LegacyWallet, SegwitBech32Wallet, SegwitP2SHWallet } from '../class';
+import DefaultPreference from 'react-native-default-preference';
+import RNWidgetCenter from 'react-native-widget-center';
 const bitcoin = require('bitcoinjs-lib');
 const ElectrumClient = require('electrum-client');
 const reverse = require('buffer-reverse');
@@ -40,6 +42,17 @@ async function connectMain() {
   const savedPeer = await getSavedPeer();
   if (savedPeer && savedPeer.host && (savedPeer.tcp || savedPeer.ssl)) {
     usingPeer = savedPeer;
+  }
+
+  try {
+    await DefaultPreference.setName('group.io.bluewallet.bluewallet');
+    await DefaultPreference.set(AppStorage.ELECTRUM_HOST, usingPeer.host);
+    await DefaultPreference.set(AppStorage.ELECTRUM_TCP_PORT, usingPeer.tcp);
+    await DefaultPreference.set(AppStorage.ELECTRUM_SSL_PORT, usingPeer.ssl);
+    RNWidgetCenter.reloadAllTimelines();
+  } catch (e) {
+    // Must be running on Android
+    console.log(e);
   }
 
   try {
@@ -521,15 +534,27 @@ module.exports.calculateBlockTime = function (height) {
  */
 module.exports.testConnection = async function (host, tcpPort, sslPort) {
   const client = new ElectrumClient(sslPort || tcpPort, host, sslPort ? 'tls' : 'tcp');
+  client.onError = () => {}; // mute
+  let timeoutId = false;
   try {
-    await client.connect();
+    const rez = await Promise.race([
+      new Promise(resolve => {
+        timeoutId = setTimeout(() => resolve('timeout'), 3000);
+      }),
+      client.connect(),
+    ]);
+    if (rez === 'timeout') return false;
+
     await client.server_version('2.7.11', '1.4');
     await client.server_ping();
-    client.close();
     return true;
   } catch (_) {
-    return false;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    client.close();
   }
+
+  return false;
 };
 
 module.exports.forceDisconnect = () => {
